@@ -77,25 +77,23 @@ export default function Inspection() {
     return () => unsubscribe();
   }, [id]);
 
-  async function createDefaultRooms() {
-    if (rooms.length > 0) return;
-
-    for (const room of defaultRooms) {
-      await addDoc(collection(db, "room_inspections"), {
-        inspectionId: id,
-        room,
-        condition: "",
-        notes: "",
-        createdAt: serverTimestamp(),
-      });
-    }
-  }
-
   useEffect(() => {
-    if (inspection && rooms.length === 0) {
-      createDefaultRooms();
+    async function createDefaultRooms() {
+      if (!inspection || rooms.length > 0) return;
+
+      for (const room of defaultRooms) {
+        await addDoc(collection(db, "room_inspections"), {
+          inspectionId: id,
+          room,
+          condition: "",
+          notes: "",
+          createdAt: serverTimestamp(),
+        });
+      }
     }
-  }, [inspection]);
+
+    createDefaultRooms();
+  }, [inspection, rooms.length, id]);
 
   if (!inspection) {
     return <p>Loading...</p>;
