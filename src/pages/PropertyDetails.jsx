@@ -1,7 +1,9 @@
 import { useEffect, useState } from "react";
 import {
   doc,
+  deleteDoc,
   getDoc,
+  getDocs,
   collection,
   query,
   where,
@@ -18,6 +20,63 @@ export default function PropertyDetails() {
   const [inspections, setInspections] = useState([]);
   const [showInspections, setShowInspections] = useState(false);
 
+  const [documents, setDocuments] = useState([]);
+  const [showDocuments, setShowDocuments] = useState(false);
+
+  async function deleteProperty() {
+    const confirmed = window.confirm(
+      `Delete "${property.name}" and all inspection history?\n\nThis cannot be undone.`,
+    );
+
+    if (!confirmed) return;
+
+    try {
+      const inspectionsQuery = query(
+        collection(db, "inspections"),
+        where("propertyId", "==", id),
+      );
+
+      const inspectionSnapshot = await getDocs(inspectionsQuery);
+
+      for (const inspectionDoc of inspectionSnapshot.docs) {
+        const inspectionId = inspectionDoc.id;
+
+        const roomsQuery = query(
+          collection(db, "room_inspections"),
+          where("inspectionId", "==", inspectionId),
+        );
+
+        const roomsSnapshot = await getDocs(roomsQuery);
+
+        for (const roomDoc of roomsSnapshot.docs) {
+          await deleteDoc(doc(db, "room_inspections", roomDoc.id));
+        }
+
+        await deleteDoc(doc(db, "inspections", inspectionId));
+      }
+
+      await deleteDoc(doc(db, "properties", id));
+
+      navigate("/");
+    } catch (error) {
+      console.error(error);
+      alert("Failed to delete property");
+    }
+  }
+
+  async function deleteDocument(documentId) {
+    const confirmed = window.confirm("Delete this document?");
+
+    if (!confirmed) return;
+
+    try {
+      await deleteDoc(doc(db, "property_documents", documentId));
+    } catch (error) {
+      console.error(error);
+      alert("Failed to delete document");
+    }
+  }
+
   useEffect(() => {
     async function loadProperty() {
       const ref = doc(db, "properties", id);
@@ -33,6 +92,24 @@ export default function PropertyDetails() {
     }
 
     loadProperty();
+  }, [id]);
+
+  useEffect(() => {
+    const q = query(
+      collection(db, "property_documents"),
+      where("propertyId", "==", id),
+    );
+
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      setDocuments(
+        snapshot.docs.map((doc) => ({
+          id: doc.id,
+          ...doc.data(),
+        })),
+      );
+    });
+
+    return () => unsubscribe();
   }, [id]);
 
   useEffect(() => {
@@ -94,6 +171,9 @@ export default function PropertyDetails() {
           >
             New Inspection
           </button>
+          <button className="button danger-button" onClick={deleteProperty}>
+            🗑 Delete Property
+          </button>
         </div>
         <div className="card inspection-history-card">
           <div
@@ -151,6 +231,57 @@ export default function PropertyDetails() {
                 </div>
               ))
             )}
+          </div>
+        </div>
+        <div className="card inspection-history-card">
+          <div
+            className="collapsible-title"
+            onClick={() => setShowDocuments(!showDocuments)}
+          >
+            <span>📄 Documents</span>
+
+            <span className={`arrow ${showDocuments ? "rotate" : ""}`}>▼</span>
+          </div>
+
+          <div className={`collapsible-content ${showDocuments ? "open" : ""}`}>
+            {documents.length === 0 ? (
+              <p>No documents uploaded</p>
+            ) : (
+              documents.map((document) => (
+                <div key={document.id} className="inspection-card">
+                  <div>
+                    <strong>{document.name}</strong>
+                  </div>
+
+                  <div className="document-actions">
+                    <a
+                      href={document.url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="icon-button"
+                      title="View Document"
+                    >
+                      👁️
+                    </a>
+
+                    <button
+                      className="icon-button delete-icon"
+                      onClick={() => deleteDocument(document.id)}
+                      title="Delete Document"
+                    >
+                      🗑️
+                    </button>
+                  </div>
+                </div>
+              ))
+            )}
+
+            <button
+              className="button mt-3"
+              onClick={() => navigate(`/property/${id}/documents`)}
+            >
+              Upload Document
+            </button>
           </div>
         </div>
       </div>

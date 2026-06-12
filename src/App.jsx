@@ -6,6 +6,7 @@ import NewInspection from "./pages/NewInspection";
 import Inspection from "./pages/Inspection";
 import RoomInspection from "./pages/RoomInspection";
 import InspectionSummary from "./pages/InspectionSummary";
+import UploadDocument from "./pages/UploadDocument";
 
 export default function App() {
   return (
@@ -20,6 +21,7 @@ export default function App() {
         <Route path="/inspection/:id" element={<Inspection />} />
         <Route path="/inspection/:id/summary" element={<InspectionSummary />} />
         <Route path="/room/:id" element={<RoomInspection />} />
+        <Route path="/property/:id/documents" element={<UploadDocument />} />
       </Routes>
     </BrowserRouter>
   );

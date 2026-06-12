@@ -25,7 +25,12 @@ export default function Properties() {
   return (
     <div className="container">
       <div className="hero">
-        <h1 className="white-title">Home Xplorer</h1>
+        <h1 className="white-title">
+          Home Xplorer
+          <br />
+          <sup className="version-title">v0.1.0</sup>
+        </h1>
+
         <p className="text-white semi-bold">Property Inspections Made Simple</p>
       </div>
       <div className="dashboard-layout">

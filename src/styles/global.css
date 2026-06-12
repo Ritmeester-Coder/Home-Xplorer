@@ -2,6 +2,11 @@
   box-sizing: border-box;
 }
 
+.version-title {
+  font-size: 14px;
+  color: #e0e7ff;
+}
+
 body {
   margin: 0;
   background: #f4f6f8;
@@ -440,4 +445,28 @@ body {
 .summary-button {
   background: #2563eb;
   margin-top: 20px;
+}
+
+/* Document Updating Deleting */
+.document-actions {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+.icon-button {
+  background: none;
+  border: none;
+  font-size: 20px;
+  cursor: pointer;
+  text-decoration: none;
+  transition: 0.2s;
+}
+
+.icon-button:hover {
+  transform: scale(1.15);
+}
+
+.delete-icon {
+  color: #dc2626;
 }
