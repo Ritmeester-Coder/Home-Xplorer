@@ -7,11 +7,12 @@ import { db } from "../services/firebase";
 
 export default function UploadDocument() {
   const { id } = useParams();
-
   const navigate = useNavigate();
 
   const [name, setName] = useState("");
   const [uploading, setUploading] = useState(false);
+
+  console.log("Property ID:", id);
 
   async function uploadDocument(event) {
     const file = event.target.files[0];
@@ -82,6 +83,15 @@ export default function UploadDocument() {
         <input type="file" onChange={uploadDocument} disabled={uploading} />
 
         {uploading && <p>Uploading...</p>}
+      </div>
+
+      <div className="button-group upload_back_button">
+        <button
+          className="button secondary-button"
+          onClick={() => navigate(`/property/${id}`)}
+        >
+          ← Back to Property
+        </button>
       </div>
     </div>
   );
