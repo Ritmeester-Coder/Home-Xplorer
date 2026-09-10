@@ -20,10 +20,16 @@ export default function InspectionSummary() {
   const [rooms, setRooms] = useState([]);
   const [loading, setLoading] = useState(true);
 
+  // Full-size photo viewer
+  const [selectedPhoto, setSelectedPhoto] = useState(null);
+
   useEffect(() => {
     async function loadData() {
       try {
+        // ---------------------------------------------------------
         // Load inspection
+        // ---------------------------------------------------------
+
         const inspectionRef = doc(db, "inspections", id);
 
         const inspectionSnap = await getDoc(inspectionRef);
@@ -40,7 +46,10 @@ export default function InspectionSummary() {
           ...inspectionData,
         });
 
+        // ---------------------------------------------------------
         // Load property
+        // ---------------------------------------------------------
+
         const propertyRef = doc(db, "properties", inspectionData.propertyId);
 
         const propertySnap = await getDoc(propertyRef);
@@ -52,7 +61,10 @@ export default function InspectionSummary() {
           });
         }
 
+        // ---------------------------------------------------------
         // Load rooms
+        // ---------------------------------------------------------
+
         const roomsQuery = query(
           collection(db, "room_inspections"),
           where("inspectionId", "==", id),
@@ -60,14 +72,42 @@ export default function InspectionSummary() {
 
         const roomSnapshot = await getDocs(roomsQuery);
 
-        const roomData = roomSnapshot.docs.map((doc) => ({
-          id: doc.id,
-          ...doc.data(),
+        const roomData = roomSnapshot.docs.map((roomDoc) => ({
+          id: roomDoc.id,
+          ...roomDoc.data(),
+          photos: [],
         }));
 
-        setRooms(roomData);
+        // ---------------------------------------------------------
+        // Load all photos for this inspection
+        // ---------------------------------------------------------
+
+        const photosQuery = query(
+          collection(db, "room_photos"),
+          where("inspectionId", "==", id),
+        );
+
+        const photosSnapshot = await getDocs(photosQuery);
+
+        const photoData = photosSnapshot.docs.map((photoDoc) => ({
+          id: photoDoc.id,
+          ...photoDoc.data(),
+        }));
+
+        // ---------------------------------------------------------
+        // Attach photos to the correct room
+        // ---------------------------------------------------------
+
+        const roomsWithPhotos = roomData.map((room) => ({
+          ...room,
+          photos: photoData.filter(
+            (photo) => photo.roomInspectionId === room.id,
+          ),
+        }));
+
+        setRooms(roomsWithPhotos);
       } catch (error) {
-        console.error(error);
+        console.error("Failed to load inspection summary:", error);
       }
 
       setLoading(false);
@@ -88,15 +128,10 @@ export default function InspectionSummary() {
     });
   }
 
-  if (loading) {
-    return (
-      <div className="container">
-        <div className="card">Loading inspection summary...</div>
-      </div>
-    );
-  }
-
+  // ---------------------------------------------------------
   // Generate PDF
+  // ---------------------------------------------------------
+
   function generatePdf() {
     const pdf = new jsPDF();
 
@@ -154,50 +189,71 @@ export default function InspectionSummary() {
       y += splitNotes.length * 6;
 
       y += 10;
+
       pdf.line(20, y, 190, y);
+
       y += 10;
-      pdf.text(`Generated: ${new Date().toLocaleString()}`, 20, y);
     });
 
     pdf.save(`${property?.name || "Inspection"}-Report.pdf`);
   }
 
+  // ---------------------------------------------------------
+  // Loading
+  // ---------------------------------------------------------
+
+  if (loading) {
+    return (
+      <div className="container">
+        <div className="card">Loading inspection summary...</div>
+      </div>
+    );
+  }
+
   return (
     <div className="container">
-      {/* Header */}
+      {/* =====================================================
+          INSPECTION HEADER
+      ===================================================== */}
+
       <div className="inspection-summary-card">
         <div className="inspection-summary-title">📋 Inspection Summary</div>
 
         <div className="inspection-summary-columns">
           {/* LEFT COLUMN */}
+
           <div className="inspection-summary-column">
             <div className="summary-item">
               <div className="summary-label">Property:</div>
-              <div className="summary-value">A</div>
+
+              <div className="summary-value">{property?.name || "-"}</div>
             </div>
 
             <div className="summary-item">
               <div className="summary-label">Address:</div>
-              <div className="summary-value">
-                77 7th Street Northmead Benoni
-              </div>
+
+              <div className="summary-value">{property?.address || "-"}</div>
             </div>
 
             <div className="summary-item">
               <div className="summary-label">Inspection Type:</div>
-              <div className="summary-value">Move In</div>
+
+              <div className="summary-value">{inspection?.type || "-"}</div>
             </div>
           </div>
 
           {/* RIGHT COLUMN */}
+
           <div className="inspection-summary-column">
             <div className="summary-item">
               <div className="summary-label">Status:</div>
-              <div className="summary-value">Completed</div>
+
+              <div className="summary-value">{inspection?.status || "-"}</div>
             </div>
 
             <div className="summary-item">
               <div className="summary-label">Created:</div>
+
               <div className="summary-value">
                 {formatDate(inspection?.createdAt)}
               </div>
@@ -205,20 +261,28 @@ export default function InspectionSummary() {
 
             <div className="summary-item">
               <div className="summary-label">Completed:</div>
+
               <div className="summary-value">
-                {formatDate(inspection.completedAt)}
+                {formatDate(inspection?.completedAt)}
               </div>
             </div>
           </div>
         </div>
       </div>
 
-      {/* Rooms */}
+      {/* =====================================================
+          ROOMS
+      ===================================================== */}
+
       <div className="card inspection-room">
-        {/* Actions */}
+        {/* ACTIONS */}
+
         <div
           className="button-group"
-          style={{ marginTop: "0px", marginBottom: "20px" }}
+          style={{
+            marginTop: "0px",
+            marginBottom: "20px",
+          }}
         >
           <button
             className="button secondary-button"
@@ -231,6 +295,7 @@ export default function InspectionSummary() {
             Generate PDF
           </button>
         </div>
+
         <div className="title">🏠 Room Details</div>
 
         {rooms.length === 0 ? (
@@ -238,23 +303,78 @@ export default function InspectionSummary() {
         ) : (
           rooms.map((room) => (
             <div key={room.id} className="room-summary-card">
-              <h3>
-                {room.condition ? "✅" : "⚪"} {room.room}
-              </h3>
+              {/* =================================================
+                  ROOM CONTENT
+              ================================================= */}
 
-              <p>
-                <strong>Condition:</strong> {room.condition || "Not Completed"}
-              </p>
+              <div className="room-summary-content">
+                <h3>
+                  {room.condition ? "✅" : "⚪"} {room.room}
+                </h3>
 
-              <p>
-                <strong>Notes:</strong>
-              </p>
+                <p>
+                  <strong>Condition:</strong>{" "}
+                  {room.condition || "Not Completed"}
+                </p>
 
-              <p>{room.notes || "No notes captured"}</p>
+                <p>
+                  <strong>Notes:</strong>
+                </p>
+
+                <p>{room.notes || "No notes captured"}</p>
+              </div>
+
+              {/* =================================================
+                  ROOM PHOTOS
+              ================================================= */}
+
+              {room.photos?.length > 0 && (
+                <div className="room-summary-photos">
+                  {room.photos.map((photo) => (
+                    <button
+                      key={photo.id}
+                      type="button"
+                      className="room-summary-photo-button"
+                      onClick={() => setSelectedPhoto(photo.url)}
+                    >
+                      <img
+                        src={photo.url}
+                        alt={
+                          photo.originalName || `${room.room} inspection photo`
+                        }
+                        className="room-summary-photo"
+                      />
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
           ))
         )}
       </div>
+
+      {/* =====================================================
+          FULL SIZE PHOTO VIEWER
+      ===================================================== */}
+
+      {selectedPhoto && (
+        <div className="photo-modal" onClick={() => setSelectedPhoto(null)}>
+          <button
+            type="button"
+            className="photo-modal-close"
+            onClick={() => setSelectedPhoto(null)}
+          >
+            ✕
+          </button>
+
+          <img
+            src={selectedPhoto}
+            alt="Inspection"
+            className="photo-modal-image"
+            onClick={(event) => event.stopPropagation()}
+          />
+        </div>
+      )}
     </div>
   );
 }

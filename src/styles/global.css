@@ -795,3 +795,139 @@ body {
     font-size: 20px;
   }
 }
+
+/* =========================================================
+   ROOM SUMMARY
+========================================================= */
+
+.room-summary-card {
+  display: flex;
+  justify-content: space-between;
+  align-items: stretch;
+  gap: 25px;
+  padding: 16px;
+  margin-bottom: 12px;
+  border: 1px solid #dfe3e8;
+  border-radius: 12px;
+  background: #fff;
+}
+
+.room-summary-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.room-summary-content h3 {
+  margin-top: 0;
+  margin-bottom: 10px;
+}
+
+/* =========================================================
+   ROOM PHOTOS
+========================================================= */
+
+.room-summary-photos {
+  display: grid;
+  grid-template-columns: repeat(2, 80px);
+  grid-auto-rows: 80px;
+  gap: 8px;
+  flex-shrink: 0;
+  align-content: center;
+}
+
+.room-summary-photo-button {
+  padding: 0;
+  border: none;
+  background: none;
+  cursor: pointer;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.room-summary-photo {
+  width: 80px;
+  height: 80px;
+  display: block;
+  object-fit: cover;
+  border-radius: 8px;
+  border: 1px solid #d9dde3;
+  transition: transform 0.15s ease;
+}
+
+.room-summary-photo-button:hover .room-summary-photo {
+  transform: scale(1.04);
+}
+
+/* =========================================================
+   FULL SIZE PHOTO MODAL
+========================================================= */
+
+.photo-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  padding: 30px;
+
+  background: rgba(0, 0, 0, 0.85);
+}
+
+.photo-modal-image {
+  max-width: 95vw;
+  max-height: 90vh;
+
+  object-fit: contain;
+
+  border-radius: 8px;
+}
+
+.photo-modal-close {
+  position: fixed;
+  top: 20px;
+  right: 25px;
+
+  width: 42px;
+  height: 42px;
+
+  border: none;
+  border-radius: 50%;
+
+  background: rgba(255, 255, 255, 0.9);
+
+  font-size: 20px;
+  font-weight: bold;
+
+  cursor: pointer;
+}
+
+/* =========================================================
+   MOBILE
+========================================================= */
+
+@media (max-width: 700px) {
+  .room-summary-card {
+    flex-direction: column;
+  }
+
+  .room-summary-photos {
+    grid-template-columns: repeat(4, 70px);
+    grid-auto-rows: 70px;
+  }
+
+  .room-summary-photo {
+    width: 70px;
+    height: 70px;
+  }
+}
+
+.photo-limit-message {
+  margin-top: 10px;
+  padding: 10px;
+  text-align: center;
+  font-size: 14px;
+  color: #666;
+}

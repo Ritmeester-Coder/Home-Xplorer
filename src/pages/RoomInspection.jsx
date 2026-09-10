@@ -18,6 +18,7 @@ import { useParams, useNavigate } from "react-router-dom";
 import { db } from "../services/firebase";
 import { supabase } from "../services/supabase";
 
+const MAX_PHOTOS_PER_ROOM = 4;
 const roomIcons = {
   Kitchen: "🍳",
   Bedroom: "🛏️",
@@ -26,7 +27,6 @@ const roomIcons = {
   Garage: "🏠",
   Outside: "🌳",
 };
-
 const roomOrder = [
   "Kitchen",
   "Bedroom",
@@ -278,61 +278,59 @@ export default function RoomInspection() {
    */
 
   async function uploadPhotos(files) {
-    if (!files || files.length === 0) {
-      return;
-    }
+    if (!files || files.length === 0) return;
 
     if (!room) {
       alert("Room information has not finished loading.");
       return;
     }
 
+    // ---------------------------------------------------------
+    // Enforce maximum of 4 photos per room
+    // ---------------------------------------------------------
+
+    const remainingSlots = MAX_PHOTOS_PER_ROOM - photos.length;
+
+    if (remainingSlots <= 0) {
+      alert(
+        `This room already has the maximum of ${MAX_PHOTOS_PER_ROOM} photos.`,
+      );
+      return;
+    }
+
+    const imageFiles = Array.from(files).filter((file) =>
+      file.type?.startsWith("image/"),
+    );
+
+    if (imageFiles.length === 0) {
+      alert("Please select image files only.");
+      return;
+    }
+
+    const filesToUpload = imageFiles.slice(0, remainingSlots);
+
+    if (imageFiles.length > remainingSlots) {
+      alert(
+        `You can only have ${MAX_PHOTOS_PER_ROOM} photos per room.\n\n` +
+          `You already have ${photos.length} photo(s), ` +
+          `so only ${remainingSlots} more photo(s) can be added.`,
+      );
+    }
+
     try {
       setUploading(true);
 
-      for (const file of files) {
-        /*
-         * Only allow image files
-         */
-
-        if (!file.type || !file.type.startsWith("image/")) {
-          console.warn("Skipping non-image file:", file.name);
-
-          continue;
-        }
-
-        /*
-         * Create a unique ID for the file.
-         */
-
+      for (const file of filesToUpload) {
         const uniqueId =
           typeof crypto !== "undefined" && crypto.randomUUID
             ? crypto.randomUUID()
             : `${Date.now()}-${Math.random().toString(36).substring(2, 10)}`;
 
-        /*
-         * Clean the filename
-         */
-
         const safeFileName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
-
-        /*
-         * Final filename
-         */
 
         const fileName = `${Date.now()}-${uniqueId}-${safeFileName}`;
 
-        /*
-         * Store each room's photos inside its own folder.
-         */
-
         const storagePath = `${id}/${fileName}`;
-
-        /*
-         * ---------------------------------------------------
-         * UPLOAD TO SUPABASE STORAGE
-         * ---------------------------------------------------
-         */
 
         const { error: uploadError } = await supabase.storage
           .from("inspection-photos")
@@ -348,12 +346,6 @@ export default function RoomInspection() {
           throw uploadError;
         }
 
-        /*
-         * ---------------------------------------------------
-         * GET PUBLIC URL
-         * ---------------------------------------------------
-         */
-
         const { data: publicUrlData } = supabase.storage
           .from("inspection-photos")
           .getPublicUrl(storagePath);
@@ -364,63 +356,33 @@ export default function RoomInspection() {
           throw new Error("Supabase did not return a public photo URL.");
         }
 
-        /*
-         * ---------------------------------------------------
-         * SAVE PHOTO METADATA TO FIRESTORE
-         * ---------------------------------------------------
-         */
-
         const photoDoc = await addDoc(collection(db, "room_photos"), {
           roomInspectionId: id,
           inspectionId: room.inspectionId || null,
           room: room.room || "",
-
           url: downloadURL,
-
           storagePath,
-
           fileName,
-
           originalName: file.name,
-
           contentType: file.type,
-
           size: file.size,
-
           createdAt: serverTimestamp(),
         });
-
-        /*
-         * ---------------------------------------------------
-         * ADD PHOTO TO UI IMMEDIATELY
-         * ---------------------------------------------------
-         */
 
         setPhotos((current) => [
           {
             id: photoDoc.id,
-
             roomInspectionId: id,
-
             inspectionId: room.inspectionId || null,
-
             room: room.room || "",
-
             url: downloadURL,
-
             storagePath,
-
             fileName,
-
             originalName: file.name,
-
             contentType: file.type,
-
             size: file.size,
-
             createdAt: null,
           },
-
           ...current,
         ]);
       }
@@ -728,10 +690,17 @@ export default function RoomInspection() {
             ================================================= */}
 
         <div className="photo-section">
-          <div className="photo-section-title">📷 Photos</div>
+          <div className="photo-section-title">
+            📷 Photos ({photos.length}/{MAX_PHOTOS_PER_ROOM})
+          </div>
 
           <p className="photo-help">
             Take photos of the room and any defects or issues found.
+            {photos.length >= MAX_PHOTOS_PER_ROOM && (
+              <div className="photo-limit-message">
+                Maximum of 4 photos reached for this room.
+              </div>
+            )}
           </p>
 
           <div className="photo-buttons">
@@ -741,7 +710,11 @@ export default function RoomInspection() {
               type="button"
               className="button"
               onClick={() => cameraInputRef.current?.click()}
-              disabled={uploading || switchingRoom}
+              disabled={
+                uploading ||
+                switchingRoom ||
+                photos.length >= MAX_PHOTOS_PER_ROOM
+              }
             >
               📷 Take Photo
             </button>
@@ -752,7 +725,11 @@ export default function RoomInspection() {
               type="button"
               className="button secondary-button"
               onClick={() => fileInputRef.current?.click()}
-              disabled={uploading || switchingRoom}
+              disabled={
+                uploading ||
+                switchingRoom ||
+                photos.length >= MAX_PHOTOS_PER_ROOM
+              }
             >
               🖼️ Upload Photos
             </button>
