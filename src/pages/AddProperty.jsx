@@ -51,14 +51,12 @@ export default function AddProperty() {
     <>
       <div className="card welcome-section">
         <p className="text-lg font-semibold">
-          Welcome <br />
-          <br />
-          <span className="black-title">Agent Name</span>
+          <span className="black-title">Remax</span>
         </p>
         <br />
         <p>
-          Start by adding a property to begin your inspection journey, or simply
-          navigate to an existing property.
+          Welcome Agent, Start by adding a property to begin your inspection
+          journey, or simply navigate to an existing property.
         </p>
       </div>
       <div className="card">

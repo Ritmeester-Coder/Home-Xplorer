@@ -626,14 +626,12 @@ export default function RoomInspection() {
           >
             {previousRoom && (
               <>
-                <span className="room-nav-arrow">←</span>
-
                 <span className="room-nav-room">
                   <span className="room-nav-icon">
                     {roomIcons[previousRoom.room] || "🏠"}
                   </span>
 
-                  <span className="room-nav-name">{previousRoom.room}</span>
+                  <span className="room-nav-name"></span>
                 </span>
               </>
             )}
@@ -670,10 +668,8 @@ export default function RoomInspection() {
                     {roomIcons[nextRoom.room] || "🏠"}
                   </span>
 
-                  <span className="room-nav-name">{nextRoom.room}</span>
+                  <span className="room-nav-name"></span>
                 </span>
-
-                <span className="room-nav-arrow">→</span>
               </>
             )}
           </button>
