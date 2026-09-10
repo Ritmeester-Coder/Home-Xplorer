@@ -165,50 +165,72 @@ export default function InspectionSummary() {
   return (
     <div className="container">
       {/* Header */}
-      <div className="card">
-        <div className="title">📋 Inspection Summary</div>
+      <div className="inspection-summary-card">
+        <div className="inspection-summary-title">📋 Inspection Summary</div>
 
-        <p>
-          <strong>Property:</strong>
-          <br />
-          {property?.name}
-        </p>
+        <div className="inspection-summary-columns">
+          {/* LEFT COLUMN */}
+          <div className="inspection-summary-column">
+            <div className="summary-item">
+              <div className="summary-label">Property:</div>
+              <div className="summary-value">A</div>
+            </div>
 
-        <p>
-          <strong>Address:</strong>
-          <br />
-          {property?.address}
-        </p>
+            <div className="summary-item">
+              <div className="summary-label">Address:</div>
+              <div className="summary-value">
+                77 7th Street Northmead Benoni
+              </div>
+            </div>
 
-        <p>
-          <strong>Inspection Type:</strong>
-          <br />
-          {inspection?.type}
-        </p>
+            <div className="summary-item">
+              <div className="summary-label">Inspection Type:</div>
+              <div className="summary-value">Move In</div>
+            </div>
+          </div>
 
-        <p>
-          <strong>Status:</strong>
-          <br />
-          {inspection?.status}
-        </p>
+          {/* RIGHT COLUMN */}
+          <div className="inspection-summary-column">
+            <div className="summary-item">
+              <div className="summary-label">Status:</div>
+              <div className="summary-value">Completed</div>
+            </div>
 
-        <p>
-          <strong>Created:</strong>
-          <br />
-          {formatDate(inspection?.createdAt)}
-        </p>
+            <div className="summary-item">
+              <div className="summary-label">Created:</div>
+              <div className="summary-value">
+                {formatDate(inspection?.createdAt)}
+              </div>
+            </div>
 
-        {inspection?.completedAt && (
-          <p>
-            <strong>Completed:</strong>
-            <br />
-            {formatDate(inspection.completedAt)}
-          </p>
-        )}
+            <div className="summary-item">
+              <div className="summary-label">Completed:</div>
+              <div className="summary-value">
+                {formatDate(inspection.completedAt)}
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
 
       {/* Rooms */}
       <div className="card inspection-room">
+        {/* Actions */}
+        <div
+          className="button-group"
+          style={{ marginTop: "0px", marginBottom: "20px" }}
+        >
+          <button
+            className="button secondary-button"
+            onClick={() => navigate(`/inspection/${id}`)}
+          >
+            ← Back to Inspection
+          </button>
+
+          <button className="button" onClick={generatePdf}>
+            Generate PDF
+          </button>
+        </div>
         <div className="title">🏠 Room Details</div>
 
         {rooms.length === 0 ? (
@@ -232,22 +254,6 @@ export default function InspectionSummary() {
             </div>
           ))
         )}
-      </div>
-
-      {/* Actions */}
-      <div className="card inspection-action-card">
-        <div className="button-group">
-          <button
-            className="button secondary-button"
-            onClick={() => navigate(`/inspection/${id}`)}
-          >
-            ← Back to Inspection
-          </button>
-
-          <button className="button" onClick={generatePdf}>
-            Generate PDF
-          </button>
-        </div>
       </div>
     </div>
   );

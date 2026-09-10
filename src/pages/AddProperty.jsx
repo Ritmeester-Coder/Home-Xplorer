@@ -48,68 +48,82 @@ export default function AddProperty() {
   };
 
   return (
-    <div className="card">
-      <div
-        className="title-noMargin collapsible-title"
-        onClick={() => setIsOpen(!isOpen)}
-      >
-        <>
-          <span>➕ Add Property</span>
-          <span className={`arrow ${isOpen ? "rotate" : ""}`}>
-            {isOpen ? "▼" : "▶"}{" "}
-          </span>
-        </>
+    <>
+      <div className="card welcome-section">
+        <p className="text-lg font-semibold">
+          Welcome <br />
+          <br />
+          <span className="black-title">Agent Name</span>
+        </p>
+        <br />
+        <p>
+          Start by adding a property to begin your inspection journey, or simply
+          navigate to an existing property.
+        </p>
       </div>
+      <div className="card">
+        <div
+          className="title-noMargin collapsible-title"
+          onClick={() => setIsOpen(!isOpen)}
+        >
+          <>
+            <span>➕ Add Property</span>
+            <span className={`arrow ${isOpen ? "rotate" : ""}`}>
+              {isOpen ? "▼" : "▶"}{" "}
+            </span>
+          </>
+        </div>
 
-      <div className={`collapsible-content ${isOpen ? "open" : ""}`}>
-        <form onSubmit={handleSubmit}>
-          <div className="input-group">
-            <label className="label">Property Name</label>
-            <input
-              className="input"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="Unit 12"
-            />
-          </div>
+        <div className={`collapsible-content ${isOpen ? "open" : ""}`}>
+          <form onSubmit={handleSubmit}>
+            <div className="input-group">
+              <label className="label">Property Name</label>
+              <input
+                className="input"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="Unit 12"
+              />
+            </div>
 
-          <div className="input-group">
-            <label className="label">Address</label>
-            <input
-              className="input"
-              value={address}
-              onChange={(e) => setAddress(e.target.value)}
-              placeholder="123 Main Street"
-            />
-          </div>
+            <div className="input-group">
+              <label className="label">Address</label>
+              <input
+                className="input"
+                value={address}
+                onChange={(e) => setAddress(e.target.value)}
+                placeholder="123 Main Street"
+              />
+            </div>
 
-          <div className="input-group">
-            <label className="label">Tenant Name</label>
-            <input
-              className="input"
-              value={tenantName}
-              onChange={(e) => setTenantName(e.target.value)}
-              placeholder="John Smith"
-            />
-          </div>
+            <div className="input-group">
+              <label className="label">Tenant Name</label>
+              <input
+                className="input"
+                value={tenantName}
+                onChange={(e) => setTenantName(e.target.value)}
+                placeholder="John Smith"
+              />
+            </div>
 
-          <div className="input-group">
-            <label className="label">Status</label>
-            <select
-              className="input"
-              value={status}
-              onChange={(e) => setStatus(e.target.value)}
-            >
-              <option>Vacant</option>
-              <option>Occupied</option>
-            </select>
-          </div>
+            <div className="input-group">
+              <label className="label">Status</label>
+              <select
+                className="input"
+                value={status}
+                onChange={(e) => setStatus(e.target.value)}
+              >
+                <option>Vacant</option>
+                <option>Occupied</option>
+              </select>
+            </div>
 
-          <button className="button" disabled={saving}>
-            {saving ? "Saving..." : "Save Property"}
-          </button>
-        </form>
+            <button className="button" disabled={saving}>
+              {saving ? "Saving..." : "Save Property"}
+            </button>
+          </form>
+        </div>
       </div>
-    </div>
+    </>
   );
 }

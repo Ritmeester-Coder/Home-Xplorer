@@ -13,17 +13,28 @@ import {
   serverTimestamp,
 } from "firebase/firestore";
 
-import {
-  getStorage,
-  ref,
-  uploadBytes,
-  getDownloadURL,
-  deleteObject,
-} from "firebase/storage";
-
 import { useParams, useNavigate } from "react-router-dom";
 
 import { db } from "../services/firebase";
+import { supabase } from "../services/supabase";
+
+const roomIcons = {
+  Kitchen: "🍳",
+  Bedroom: "🛏️",
+  Bathroom: "🛁",
+  Lounge: "🛋️",
+  Garage: "🏠",
+  Outside: "🌳",
+};
+
+const roomOrder = [
+  "Kitchen",
+  "Bedroom",
+  "Bathroom",
+  "Lounge",
+  "Garage",
+  "Outside",
+];
 
 export default function RoomInspection() {
   const { id } = useParams();
@@ -32,6 +43,8 @@ export default function RoomInspection() {
   const cameraInputRef = useRef(null);
   const fileInputRef = useRef(null);
 
+  const propertyIdRef = useRef(null);
+
   const [room, setRoom] = useState(null);
   const [condition, setCondition] = useState("");
   const [notes, setNotes] = useState("");
@@ -39,22 +52,130 @@ export default function RoomInspection() {
   const [photos, setPhotos] = useState([]);
   const [uploading, setUploading] = useState(false);
 
+  // Room navigation
+  const [allRooms, setAllRooms] = useState([]);
+  const [currentRoomIndex, setCurrentRoomIndex] = useState(-1);
+  const [switchingRoom, setSwitchingRoom] = useState(false);
+
+  /*
+   * ---------------------------------------------------------
+   * LOAD ROOM
+   * ---------------------------------------------------------
+   */
+
   useEffect(() => {
     async function loadRoom() {
       try {
-        const ref = doc(db, "room_inspections", id);
-
-        const snapshot = await getDoc(ref);
-
-        if (snapshot.exists()) {
-          const data = snapshot.data();
-
-          setRoom(data);
-          setCondition(data.condition || "");
-          setNotes(data.notes || "");
+        if (!id) {
+          console.error("No room inspection ID supplied.");
+          return;
         }
 
-        // Load photos for this room
+        // Reset current room while loading the new one
+        setRoom(null);
+        setCondition("");
+        setNotes("");
+        setPhotos([]);
+        setCurrentRoomIndex(-1);
+
+        /*
+         * ---------------------------------------------------
+         * LOAD CURRENT ROOM
+         * ---------------------------------------------------
+         */
+
+        const roomRef = doc(db, "room_inspections", id);
+
+        const roomSnapshot = await getDoc(roomRef);
+
+        if (!roomSnapshot.exists()) {
+          console.error("Room inspection not found:", id);
+
+          alert("Room inspection could not be found.");
+
+          return;
+        }
+
+        const roomData = roomSnapshot.data();
+
+        setRoom(roomData);
+        setCondition(roomData.condition || "");
+        setNotes(roomData.notes || "");
+
+        if (roomData.inspectionId) {
+          const inspectionRef = doc(db, "inspections", roomData.inspectionId);
+
+          const inspectionSnapshot = await getDoc(inspectionRef);
+
+          if (inspectionSnapshot.exists()) {
+            const inspectionData = inspectionSnapshot.data();
+
+            propertyIdRef.current = inspectionData.propertyId;
+          }
+        }
+
+        /*
+         * ---------------------------------------------------
+         * LOAD ALL ROOMS FOR THIS INSPECTION
+         * ---------------------------------------------------
+         */
+
+        const roomsQuery = query(
+          collection(db, "room_inspections"),
+          where("inspectionId", "==", roomData.inspectionId),
+        );
+
+        const roomsSnapshot = await getDocs(roomsQuery);
+
+        const roomList = roomsSnapshot.docs.map((roomDoc) => ({
+          id: roomDoc.id,
+          ...roomDoc.data(),
+        }));
+
+        /*
+         * Remove duplicate room names.
+         *
+         * If old duplicate room documents exist in Firestore,
+         * only use the first one for navigation.
+         */
+        const uniqueRooms = [];
+
+        const seenRooms = new Set();
+
+        for (const roomItem of roomList) {
+          if (!seenRooms.has(roomItem.room)) {
+            seenRooms.add(roomItem.room);
+            uniqueRooms.push(roomItem);
+          }
+        }
+
+        /*
+         * Sort rooms into the standard inspection order.
+         */
+        uniqueRooms.sort((a, b) => {
+          const aIndex = roomOrder.indexOf(a.room);
+          const bIndex = roomOrder.indexOf(b.room);
+
+          return (
+            (aIndex === -1 ? 999 : aIndex) - (bIndex === -1 ? 999 : bIndex)
+          );
+        });
+
+        setAllRooms(uniqueRooms);
+
+        /*
+         * Find the current room in the unique room list.
+         */
+        const index = uniqueRooms.findIndex((roomItem) => roomItem.id === id);
+
+        setCurrentRoomIndex(index);
+
+        /*
+         * ---------------------------------------------------
+         * LOAD PHOTOS
+         * ---------------------------------------------------
+         */
+
         const photosQuery = query(
           collection(db, "room_photos"),
           where("roomInspectionId", "==", id),
@@ -67,7 +188,10 @@ export default function RoomInspection() {
           ...photoDoc.data(),
         }));
 
-        // Sort newest first
+        /*
+         * Sort newest first
+         */
+
         photoData.sort((a, b) => {
           const aTime = a.createdAt?.toMillis?.() || 0;
           const bTime = b.createdAt?.toMillis?.() || 0;
@@ -77,76 +201,251 @@ export default function RoomInspection() {
 
         setPhotos(photoData);
       } catch (error) {
-        console.error(error);
-        alert("Failed to load room");
+        console.error("Failed to load room:", error);
+
+        alert("Failed to load room inspection.");
       }
     }
 
     loadRoom();
   }, [id]);
 
+  /*
+   * ---------------------------------------------------------
+   * SAVE CURRENT ROOM
+   * ---------------------------------------------------------
+   */
+
+  async function saveCurrentRoom() {
+    if (!room) {
+      return;
+    }
+
+    const roomRef = doc(db, "room_inspections", id);
+
+    await updateDoc(roomRef, {
+      condition,
+      notes,
+      updatedAt: serverTimestamp(),
+    });
+  }
+
+  /*
+   * ---------------------------------------------------------
+   * ROOM NAVIGATION
+   * ---------------------------------------------------------
+   */
+
+  async function goToRoom(index) {
+    if (switchingRoom || uploading || index < 0 || index >= allRooms.length) {
+      return;
+    }
+
+    try {
+      setSwitchingRoom(true);
+
+      /*
+       * Save whatever was entered on the current room
+       * before moving away.
+       */
+
+      await saveCurrentRoom();
+
+      const nextRoom = allRooms[index];
+
+      navigate(`/room/${nextRoom.id}`);
+    } catch (error) {
+      console.error("Failed to switch rooms:", error);
+
+      alert("Could not save this room before moving to the next room.");
+    } finally {
+      setSwitchingRoom(false);
+    }
+  }
+
+  function goPreviousRoom() {
+    goToRoom(currentRoomIndex - 1);
+  }
+
+  function goNextRoom() {
+    goToRoom(currentRoomIndex + 1);
+  }
+
+  /*
+   * ---------------------------------------------------------
+   * UPLOAD PHOTOS
+   * ---------------------------------------------------------
+   */
+
   async function uploadPhotos(files) {
-    if (!files || files.length === 0) return;
+    if (!files || files.length === 0) {
+      return;
+    }
+
+    if (!room) {
+      alert("Room information has not finished loading.");
+      return;
+    }
 
     try {
       setUploading(true);
 
-      const storage = getStorage();
-
       for (const file of files) {
-        // Only allow images
-        if (!file.type.startsWith("image/")) {
+        /*
+         * Only allow image files
+         */
+
+        if (!file.type || !file.type.startsWith("image/")) {
+          console.warn("Skipping non-image file:", file.name);
+
           continue;
         }
 
-        // Create a unique filename
-        const fileName = `${Date.now()}-${file.name}`;
+        /*
+         * Create a unique ID for the file.
+         */
 
-        const storageRef = ref(storage, `room_photos/${id}/${fileName}`);
+        const uniqueId =
+          typeof crypto !== "undefined" && crypto.randomUUID
+            ? crypto.randomUUID()
+            : `${Date.now()}-${Math.random().toString(36).substring(2, 10)}`;
 
-        // Upload image
-        await uploadBytes(storageRef, file);
+        /*
+         * Clean the filename
+         */
 
-        // Get public download URL
-        const downloadURL = await getDownloadURL(storageRef);
+        const safeFileName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
 
-        // Save photo metadata in Firestore
+        /*
+         * Final filename
+         */
+
+        const fileName = `${Date.now()}-${uniqueId}-${safeFileName}`;
+
+        /*
+         * Store each room's photos inside its own folder.
+         */
+
+        const storagePath = `${id}/${fileName}`;
+
+        /*
+         * ---------------------------------------------------
+         * UPLOAD TO SUPABASE STORAGE
+         * ---------------------------------------------------
+         */
+
+        const { error: uploadError } = await supabase.storage
+          .from("inspection-photos")
+          .upload(storagePath, file, {
+            cacheControl: "3600",
+            contentType: file.type,
+            upsert: false,
+          });
+
+        if (uploadError) {
+          console.error("Supabase upload error:", uploadError);
+
+          throw uploadError;
+        }
+
+        /*
+         * ---------------------------------------------------
+         * GET PUBLIC URL
+         * ---------------------------------------------------
+         */
+
+        const { data: publicUrlData } = supabase.storage
+          .from("inspection-photos")
+          .getPublicUrl(storagePath);
+
+        const downloadURL = publicUrlData?.publicUrl;
+
+        if (!downloadURL) {
+          throw new Error("Supabase did not return a public photo URL.");
+        }
+
+        /*
+         * ---------------------------------------------------
+         * SAVE PHOTO METADATA TO FIRESTORE
+         * ---------------------------------------------------
+         */
+
         const photoDoc = await addDoc(collection(db, "room_photos"), {
           roomInspectionId: id,
-          inspectionId: room.inspectionId,
-          room: room.room,
+          inspectionId: room.inspectionId || null,
+          room: room.room || "",
+
           url: downloadURL,
+
+          storagePath,
+
           fileName,
+
           originalName: file.name,
+
           contentType: file.type,
+
+          size: file.size,
+
           createdAt: serverTimestamp(),
         });
 
-        // Add to UI immediately
+        /*
+         * ---------------------------------------------------
+         * ADD PHOTO TO UI IMMEDIATELY
+         * ---------------------------------------------------
+         */
+
         setPhotos((current) => [
           {
             id: photoDoc.id,
+
             roomInspectionId: id,
-            inspectionId: room.inspectionId,
-            room: room.room,
+
+            inspectionId: room.inspectionId || null,
+
+            room: room.room || "",
+
             url: downloadURL,
+
+            storagePath,
+
             fileName,
+
             originalName: file.name,
+
             contentType: file.type,
+
+            size: file.size,
+
+            createdAt: null,
           },
+
           ...current,
         ]);
       }
     } catch (error) {
       console.error("Photo upload failed:", error);
 
-      alert(
-        "Failed to upload photo. Please check your internet connection and try again.",
-      );
+      if (error?.message?.toLowerCase?.().includes("bucket")) {
+        alert(
+          "The inspection-photos bucket could not be accessed. Please check your Supabase Storage bucket.",
+        );
+      } else if (
+        error?.message?.toLowerCase?.().includes("row-level security")
+      ) {
+        alert(
+          "Supabase Storage permissions are blocking the upload. We need to configure the Storage policies.",
+        );
+      } else {
+        alert(
+          "Failed to upload photo.\n\n" +
+            "Please check the browser console for more details.",
+        );
+      }
     } finally {
       setUploading(false);
 
-      // Reset inputs so the same photo can be selected again
       if (cameraInputRef.current) {
         cameraInputRef.current.value = "";
       }
@@ -157,68 +456,239 @@ export default function RoomInspection() {
     }
   }
 
+  /*
+   * ---------------------------------------------------------
+   * CAMERA INPUT
+   * ---------------------------------------------------------
+   */
+
   function handleCameraChange(event) {
-    uploadPhotos(Array.from(event.target.files || []));
+    const files = Array.from(event.target.files || []);
+
+    uploadPhotos(files);
   }
 
+  /*
+   * ---------------------------------------------------------
+   * FILE INPUT
+   * ---------------------------------------------------------
+   */
+
   function handleFileChange(event) {
-    uploadPhotos(Array.from(event.target.files || []));
+    const files = Array.from(event.target.files || []);
+
+    uploadPhotos(files);
   }
+
+  /*
+   * ---------------------------------------------------------
+   * DELETE PHOTO
+   * ---------------------------------------------------------
+   */
 
   async function deletePhoto(photo) {
     const confirmed = window.confirm(
       "Delete this photo?\n\nThis cannot be undone.",
     );
 
-    if (!confirmed) return;
+    if (!confirmed) {
+      return;
+    }
 
     try {
-      const storage = getStorage();
+      /*
+       * ---------------------------------------------------
+       * DELETE FROM SUPABASE STORAGE
+       * ---------------------------------------------------
+       */
 
-      // Delete from Firebase Storage
-      const storageRef = ref(storage, `room_photos/${id}/${photo.fileName}`);
+      if (photo.storagePath) {
+        const { error: storageError } = await supabase.storage
+          .from("inspection-photos")
+          .remove([photo.storagePath]);
 
-      await deleteObject(storageRef);
+        if (storageError) {
+          console.error("Supabase storage delete error:", storageError);
 
-      // Delete Firestore record
+          throw storageError;
+        }
+      } else {
+        /*
+         * Older photos may not have storagePath.
+         */
+
+        if (photo.fileName) {
+          const oldPath = `${id}/${photo.fileName}`;
+
+          const { error: oldStorageError } = await supabase.storage
+            .from("inspection-photos")
+            .remove([oldPath]);
+
+          if (oldStorageError) {
+            console.warn("Could not remove legacy photo:", oldStorageError);
+          }
+        }
+      }
+
+      /*
+       * ---------------------------------------------------
+       * DELETE FIRESTORE RECORD
+       * ---------------------------------------------------
+       */
+
       await deleteDoc(doc(db, "room_photos", photo.id));
 
-      // Remove from screen
+      /*
+       * ---------------------------------------------------
+       * REMOVE FROM UI
+       * ---------------------------------------------------
+       */
+
       setPhotos((current) => current.filter((item) => item.id !== photo.id));
     } catch (error) {
       console.error("Failed to delete photo:", error);
 
-      alert("Failed to delete photo");
+      alert(
+        "Failed to delete photo.\n\nPlease check the browser console for details.",
+      );
     }
   }
+
+  /*
+   * ---------------------------------------------------------
+   * SAVE ROOM
+   * ---------------------------------------------------------
+   */
 
   async function saveRoom() {
     try {
-      const ref = doc(db, "room_inspections", id);
+      if (!room) {
+        return;
+      }
 
-      await updateDoc(ref, {
-        condition,
-        notes,
-        updatedAt: serverTimestamp(),
-      });
+      await saveCurrentRoom();
 
       navigate(`/inspection/${room.inspectionId}`);
     } catch (error) {
-      console.error(error);
-      alert("Failed to save room");
+      console.error("Failed to save room:", error);
+
+      alert("Failed to save room.");
     }
   }
 
+  /*
+   * ---------------------------------------------------------
+   * LOADING
+   * ---------------------------------------------------------
+   */
+
   if (!room) {
-    return <p>Loading...</p>;
+    return (
+      <div className="container">
+        <div className="card">
+          <p>Loading room...</p>
+        </div>
+      </div>
+    );
   }
+
+  const previousRoom =
+    currentRoomIndex > 0 ? allRooms[currentRoomIndex - 1] : null;
+
+  const nextRoom =
+    currentRoomIndex >= 0 && currentRoomIndex < allRooms.length - 1
+      ? allRooms[currentRoomIndex + 1]
+      : null;
+
+  /*
+   * ---------------------------------------------------------
+   * PAGE
+   * ---------------------------------------------------------
+   */
 
   return (
     <div className="container">
       <div className="card">
-        <div className="title">🏠 {room.room}</div>
+        {/* =================================================
+            ROOM NAVIGATION
+            ================================================= */}
 
-        {/* CONDITION */}
+        <div className="room-navigation">
+          {/* PREVIOUS ROOM */}
+
+          <button
+            type="button"
+            className={`room-nav-side room-nav-previous ${
+              !previousRoom ? "room-nav-hidden" : ""
+            }`}
+            onClick={goPreviousRoom}
+            disabled={!previousRoom || switchingRoom || uploading}
+          >
+            {previousRoom && (
+              <>
+                <span className="room-nav-arrow">←</span>
+
+                <span className="room-nav-room">
+                  <span className="room-nav-icon">
+                    {roomIcons[previousRoom.room] || "🏠"}
+                  </span>
+
+                  <span className="room-nav-name">{previousRoom.room}</span>
+                </span>
+              </>
+            )}
+          </button>
+
+          {/* CURRENT ROOM */}
+
+          <div className="room-nav-current">
+            <div className="room-current-icon">
+              {roomIcons[room.room] || "🏠"}
+            </div>
+
+            <div className="room-current-name">{room.room}</div>
+
+            <div className="room-current-position">
+              {currentRoomIndex + 1} of {allRooms.length}
+            </div>
+          </div>
+
+          {/* NEXT ROOM */}
+
+          <button
+            type="button"
+            className={`room-nav-side room-nav-next ${
+              !nextRoom ? "room-nav-hidden" : ""
+            }`}
+            onClick={goNextRoom}
+            disabled={!nextRoom || switchingRoom || uploading}
+          >
+            {nextRoom && (
+              <>
+                <span className="room-nav-room">
+                  <span className="room-nav-icon">
+                    {roomIcons[nextRoom.room] || "🏠"}
+                  </span>
+
+                  <span className="room-nav-name">{nextRoom.room}</span>
+                </span>
+
+                <span className="room-nav-arrow">→</span>
+              </>
+            )}
+          </button>
+        </div>
+
+        {/* =================================================
+            SWITCHING INDICATOR
+            ================================================= */}
+
+        {switchingRoom && <div className="room-switching">Saving room...</div>}
+
+        {/* =================================================
+            CONDITION
+            ================================================= */}
+
         <div className="input-group">
           <label className="label">Condition</label>
 
@@ -226,16 +696,24 @@ export default function RoomInspection() {
             className="input"
             value={condition}
             onChange={(e) => setCondition(e.target.value)}
+            disabled={uploading || switchingRoom}
           >
             <option value="">Select Condition</option>
-            <option>Excellent</option>
-            <option>Good</option>
-            <option>Fair</option>
-            <option>Poor</option>
+
+            <option value="Excellent">Excellent</option>
+
+            <option value="Good">Good</option>
+
+            <option value="Fair">Fair</option>
+
+            <option value="Poor">Poor</option>
           </select>
         </div>
 
-        {/* NOTES */}
+        {/* =================================================
+            NOTES
+            ================================================= */}
+
         <div className="input-group">
           <label className="label">Notes</label>
 
@@ -244,10 +722,15 @@ export default function RoomInspection() {
             rows="5"
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
+            disabled={uploading || switchingRoom}
+            placeholder="Enter any notes, defects or observations..."
           />
         </div>
 
-        {/* PHOTOS */}
+        {/* =================================================
+            PHOTOS
+            ================================================= */}
+
         <div className="photo-section">
           <div className="photo-section-title">📷 Photos</div>
 
@@ -257,27 +740,30 @@ export default function RoomInspection() {
 
           <div className="photo-buttons">
             {/* CAMERA */}
+
             <button
               type="button"
               className="button"
               onClick={() => cameraInputRef.current?.click()}
-              disabled={uploading}
+              disabled={uploading || switchingRoom}
             >
               📷 Take Photo
             </button>
 
-            {/* UPLOAD EXISTING */}
+            {/* UPLOAD */}
+
             <button
               type="button"
               className="button secondary-button"
               onClick={() => fileInputRef.current?.click()}
-              disabled={uploading}
+              disabled={uploading || switchingRoom}
             >
               🖼️ Upload Photos
             </button>
           </div>
 
-          {/* Hidden camera input */}
+          {/* CAMERA INPUT */}
+
           <input
             ref={cameraInputRef}
             type="file"
@@ -287,7 +773,8 @@ export default function RoomInspection() {
             onChange={handleCameraChange}
           />
 
-          {/* Hidden file input */}
+          {/* FILE INPUT */}
+
           <input
             ref={fileInputRef}
             type="file"
@@ -297,11 +784,14 @@ export default function RoomInspection() {
             onChange={handleFileChange}
           />
 
+          {/* UPLOADING */}
+
           {uploading && (
             <div className="photo-uploading">Uploading photo...</div>
           )}
 
           {/* PHOTO GRID */}
+
           {photos.length > 0 && (
             <div className="photo-grid">
               {photos.map((photo) => (
@@ -316,6 +806,7 @@ export default function RoomInspection() {
                     type="button"
                     className="photo-delete"
                     onClick={() => deletePhoto(photo)}
+                    disabled={uploading}
                     title="Delete photo"
                   >
                     🗑️
@@ -325,18 +816,29 @@ export default function RoomInspection() {
             </div>
           )}
 
+          {/* NO PHOTOS */}
+
           {photos.length === 0 && !uploading && (
             <div className="no-photos">No photos captured yet</div>
           )}
         </div>
 
-        {/* BUTTONS */}
-        <div className="button-group">
+        {/* =================================================
+            ACTION BUTTONS
+            ================================================= */}
+
+        <div className="button-group mt-20">
           <button
             type="button"
             className="button secondary-button"
-            onClick={() => navigate(-1)}
-            disabled={uploading}
+            onClick={() => {
+              if (propertyIdRef.current) {
+                navigate(`/property/${propertyIdRef.current}`);
+              } else {
+                navigate(-1);
+              }
+            }}
+            disabled={uploading || switchingRoom}
           >
             ← Back
           </button>
@@ -345,7 +847,7 @@ export default function RoomInspection() {
             type="button"
             className="button"
             onClick={saveRoom}
-            disabled={uploading}
+            disabled={uploading || switchingRoom}
           >
             Save Room
           </button>

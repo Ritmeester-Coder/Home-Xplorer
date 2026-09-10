@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   doc,
   getDoc,
@@ -6,7 +6,7 @@ import {
   query,
   where,
   onSnapshot,
-  addDoc,
+  setDoc,
   deleteDoc,
   getDocs,
   updateDoc,
@@ -43,6 +43,8 @@ export default function Inspection() {
   const [inspection, setInspection] = useState(null);
   const [rooms, setRooms] = useState([]);
 
+  const creatingRoomsRef = useRef(false);
+
   useEffect(() => {
     async function loadInspection() {
       const inspectionRef = doc(db, "inspections", id);
@@ -78,22 +80,50 @@ export default function Inspection() {
   }, [id]);
 
   useEffect(() => {
-    async function createDefaultRooms() {
-      if (!inspection || rooms.length > 0) return;
+    if (!inspection || creatingRoomsRef.current) return;
 
-      for (const room of defaultRooms) {
-        await addDoc(collection(db, "room_inspections"), {
-          inspectionId: id,
-          room,
-          condition: "",
-          notes: "",
-          createdAt: serverTimestamp(),
-        });
+    creatingRoomsRef.current = true;
+
+    async function ensureDefaultRooms() {
+      try {
+        for (const room of defaultRooms) {
+          /*
+           * Create a predictable document ID.
+           *
+           * This means the same inspection can NEVER
+           * have two automatically-created Kitchen
+           * documents, two Bedroom documents, etc.
+           */
+
+          const roomId = `${id}_${room.toLowerCase()}`;
+
+          const roomRef = doc(db, "room_inspections", roomId);
+
+          const roomSnapshot = await getDoc(roomRef);
+
+          /*
+           * Only create the room if it doesn't already exist.
+           */
+
+          if (!roomSnapshot.exists()) {
+            await setDoc(roomRef, {
+              inspectionId: id,
+              room,
+              condition: "",
+              notes: "",
+              createdAt: serverTimestamp(),
+            });
+          }
+        }
+      } catch (error) {
+        console.error("Failed to create default rooms:", error);
+
+        creatingRoomsRef.current = false;
       }
     }
 
-    createDefaultRooms();
-  }, [inspection, rooms.length, id]);
+    ensureDefaultRooms();
+  }, [inspection, id]);
 
   if (!inspection) {
     return <p>Loading...</p>;
@@ -177,21 +207,31 @@ export default function Inspection() {
           </div>
         </div>
       </div>
-      <div className="button-group">
-        <button
-          className="button secondary-button back-to-property-button"
-          onClick={() => navigate(`/property/${inspection.propertyId}`)}
+      <div className="card header-card">
+        <div
+          className="button-group"
+          style={{ marginTop: "-20px", marginBottom: "20px" }}
         >
-          ← Back to Property
-        </button>
+          <button
+            className="button secondary-button back-to-property-button"
+            onClick={() => navigate(`/property/${inspection.propertyId}`)}
+          >
+            ← Back to Property
+          </button>
 
-        {inspection.status === "Draft" && (
+          {inspection.status === "Completed" && (
+            <button
+              className="button summary-button"
+              onClick={() => navigate(`/inspection/${id}/summary`)}
+            >
+              View Summary
+            </button>
+          )}
+
           <button className="button danger-button" onClick={deleteInspection}>
             🗑 Delete Inspection
           </button>
-        )}
-      </div>
-      <div className="card header-card">
+        </div>
         <div className="title">Rooms</div>
 
         {rooms.map((room) => {
@@ -234,14 +274,6 @@ export default function Inspection() {
             </p>
           )}
         </div>
-      )}
-      {inspection.status === "Completed" && (
-        <button
-          className="button summary-button"
-          onClick={() => navigate(`/inspection/${id}/summary`)}
-        >
-          View Summary
-        </button>
       )}
     </div>
   );

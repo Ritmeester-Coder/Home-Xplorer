@@ -160,6 +160,7 @@ export default function PropertyDetails() {
         <div className="button-group mt-3">
           <button
             className="button secondary-button"
+            style={{ marginTop: "20px" }}
             onClick={() => navigate("/")}
           >
             ← Back
@@ -167,6 +168,7 @@ export default function PropertyDetails() {
 
           <button
             className="button"
+            style={{ marginTop: "20px" }}
             onClick={() => navigate(`/property/${id}/inspection/new`)}
           >
             New Inspection
